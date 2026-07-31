@@ -12,6 +12,7 @@ from app.keyboards import (
 )
 from app.states import RegistrationStates
 from app.utils.texts import get_text
+from app.utils.moderation import contains_bad_words
 
 router = Router(name="registration")
 
@@ -43,6 +44,9 @@ async def process_name(message: Message, db_user: User, state: FSMContext) -> No
     name = message.text.strip()
     if len(name) < 2 or len(name) > 50:
         await message.answer(get_text("enter_name", db_user.language))
+        return
+    if contains_bad_words(name):
+        await message.answer("❌ Имя содержит недопустимые слова. Введи другое.")
         return
     db_user.name = name
     await message.answer(get_text("enter_age", db_user.language))
@@ -114,6 +118,9 @@ async def process_description(
     message: Message, db_user: User, state: FSMContext
 ) -> None:
     description = message.text.strip()
+    if contains_bad_words(description):
+        await message.answer("❌ Описание содержит недопустимые слова. Напиши другое.")
+        return
     if len(description) > 500:
         description = description[:500]
     db_user.description = description
