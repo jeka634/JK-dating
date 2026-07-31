@@ -96,7 +96,10 @@ def main_menu_keyboard(language: Language) -> ReplyKeyboardMarkup:
             KeyboardButton(text="⭐ Premium"),
             KeyboardButton(text="👤 My profile"),
         )
-        builder.row(KeyboardButton(text="⚙️ Settings"))
+        builder.row(
+            KeyboardButton(text="⚙️ Settings"),
+        )
+        builder.row(KeyboardButton(text="💎 Tonkeeper (TON)"))
     return builder.as_markup(resize_keyboard=True)
 
 
