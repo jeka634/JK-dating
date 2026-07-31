@@ -10,12 +10,15 @@ from aiogram_tonconnect.tonconnect.models import ConnectWalletCallbacks
 
 from app.keyboards import main_menu_keyboard
 from app.database.models import User, Language
+from app.database.repositories.user import UserRepository
 
 router = Router(name="ton_wallet")
 router.message.filter(F.chat.type == ChatType.PRIVATE)
 router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
 
 logger = logging.getLogger(__name__)
+
+JK_TOKEN = "EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM"
 
 
 class TonConnectService:
@@ -25,9 +28,6 @@ class TonConnectService:
 
     async def get_wallet_info(self, address: str) -> dict:
         return {"address": address, "balance": "0"}
-
-
-JK_TOKEN = "EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM"
 
 
 async def fetch_jk_balance(wallet_address: str) -> str | None:
@@ -44,43 +44,38 @@ async def fetch_jk_balance(wallet_address: str) -> str | None:
         return None
 
 
+async def save_wallet_to_db(telegram_id: int, address: str, lang: Language = Language.RU):
+    """Сохраняет адрес кошелька в БД и возвращает язык пользователя."""
+    from app.database.session import get_session
+    from sqlalchemy import select
+    async with get_session() as session:
+        stmt = select(User).where(User.telegram_id == telegram_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.ton_wallet_address = address
+            await session.commit()
+            return user.language or Language.RU
+    return lang
+
+
 @router.message(F.text.in_(["💎 Tonkeeper (TON)", "Tonkeeper (TON)", "Tonkeeper"]))
-async def ton_connect_handler(message: types.Message, atc_manager: ATCManager, state: FSMContext) -> None:
+async def ton_connect_handler(message: types.Message, atc_manager: ATCManager) -> None:
     """Подключение TON кошелька через TonConnect."""
 
     async def after_connect():
-        """Вызывается после успешного подключения."""
-        address = atc_manager.user.wallet_address
-        if address:
-            # Сохраняем в БД
-            from app.database.session import get_session
-            from sqlalchemy import select
-            async with get_session() as session:
-                stmt = select(User).where(User.telegram_id == message.from_user.id)
-                result = await session.execute(stmt)
-                user = result.scalar_one_or_none()
-                if user:
-                    user.ton_wallet_address = address
-                    await session.commit()
+        address = atc_manager.user.wallet_address if atc_manager else None
+        if not address:
+            await message.answer("⚠️ Кошелёк не подключён. Попробуй снова.")
+            return
 
-        jk_balance = await fetch_jk_balance(address) if address else None
-        lang = Language.RU
-        from app.database.session import get_session
-        from sqlalchemy import select
-        async with get_session() as session:
-            stmt = select(User).where(User.telegram_id == message.from_user.id)
-            result = await session.execute(stmt)
-            user = result.scalar_one_or_none()
-            if user:
-                lang = user.language or Language.RU
-
+        lang = await save_wallet_to_db(message.from_user.id, address)
+        jk_balance = await fetch_jk_balance(address)
         balance_line = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
         await message.answer(
             f"✅ Кошелёк подключён!\n`{address[:20]}...`{balance_line}",
             reply_markup=main_menu_keyboard(lang),
         )
 
-    callbacks = ConnectWalletCallbacks(
-        after_callback=after_connect,
-    )
+    callbacks = ConnectWalletCallbacks(after_callback=after_connect)
     await atc_manager.connect_wallet(callbacks)

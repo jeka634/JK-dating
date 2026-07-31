@@ -389,12 +389,31 @@ async def settings_ton(callback: CallbackQuery, db_user: User, atc_manager) -> N
 
 
 @router.callback_query(F.data == "ton:connect")
-async def ton_connect(callback: CallbackQuery, db_user: User) -> None:
-    """Перенаправляет на TON Connect."""
-    # Имитируем нажатие кнопки Tonkeeper
-    from app.ton.connect import ton_connect_handler
-    await callback.message.answer("🔗 Запускаю подключение...")
-    await ton_connect_handler(callback.message, None, None)
+async def ton_connect(callback: CallbackQuery, db_user: User, atc_manager) -> None:
+    """Перенаправляет на TON Connect через нажатие кнопки."""
+    from aiogram_tonconnect import ATCManager
+    from app.ton.connect import ConnectWalletCallbacks, save_wallet_to_db, fetch_jk_balance
+    from app.keyboards import main_menu_keyboard
+
+    if not atc_manager:
+        await callback.message.answer("⚠️ Ошибка. Нажми 💎 Tonkeeper (TON) в главном меню.")
+        await callback.answer()
+        return
+
+    async def after_connect():
+        address = atc_manager.user.wallet_address
+        if not address:
+            return
+        lang = await save_wallet_to_db(callback.from_user.id, address)
+        jk_balance = await fetch_jk_balance(address)
+        balance_line = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
+        await callback.message.answer(
+            f"✅ Кошелёк подключён!\n`{address[:20]}...`{balance_line}",
+            reply_markup=main_menu_keyboard(lang),
+        )
+
+    callbacks = ConnectWalletCallbacks(after_callback=after_connect)
+    await atc_manager.connect_wallet(callbacks)
     await callback.answer()
 
 
