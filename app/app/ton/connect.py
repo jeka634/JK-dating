@@ -19,6 +19,12 @@ from sqlalchemy import select
 router = Router(name="ton_wallet")
 logger = logging.getLogger(__name__)
 
+
+class TonConnectService:
+    """Совместимость."""
+    pass
+
+
 MANIFEST_URL = "https://raw.githubusercontent.com/NicktoZz/pyton/refs/heads/main/tonconnect-manifest.json"
 
 
