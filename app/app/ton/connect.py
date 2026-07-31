@@ -63,7 +63,7 @@ async def get_wallet_address(telegram_id: int) -> str | None:
     return None
 
 
-@router.message(F.text.in_(["Tonkeeper (TON)", "Tonkeeper"]))
+@router.message(F.text.in_(["💎 Tonkeeper (TON)", "Tonkeeper (TON)", "Tonkeeper"]))
 async def connect_wallet_handler(message: types.Message, state: FSMContext):
     """Обработчик кнопки 'Tonkeeper'."""
 
