@@ -1,7 +1,6 @@
-"""TON Wallet Connect для JK Dating — авторизация через Tonkeeper."""
 import asyncio, logging, os, random
 import qrcode
-from aiogram import Router, F, types
+from aiogram import types, Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from pytonconnect import TonConnect
@@ -11,6 +10,12 @@ router = Router(name="ton_wallet")
 MANIFEST_URL = "https://raw.githubusercontent.com/NicktoZz/pyton/refs/heads/main/tonconnect-manifest.json"
 
 logger = logging.getLogger(__name__)
+
+
+class TonConnectService:
+    """Совместимость со старым кодом. Новый функционал через pytonconnect."""
+    async def validate_address(self, address: str) -> bool:
+        return bool(address and len(address) >= 48)
 
 
 class MemoryStorage(IStorage):

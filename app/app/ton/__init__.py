@@ -1,3 +1,3 @@
-from app.ton.connect import TonConnectService, TonWalletInfo
+from app.ton.connect import router
 
-__all__ = ["TonConnectService", "TonWalletInfo"]
+__all__ = ["router"]
