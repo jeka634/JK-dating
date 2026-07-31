@@ -1,14 +1,18 @@
-import asyncio
-import sys
+import asyncio, sys, json, urllib.request
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 
+from aiogram_tonconnect.handlers import AiogramTonConnectHandlers
+from aiogram_tonconnect.middleware import AiogramTonConnectMiddleware
+from aiogram_tonconnect.tonconnect.storage import ATCRedisStorage
+from aiogram_tonconnect.utils.qrcode import QRUrlProvider
+from tonutils.tonconnect import TonConnect
+
 from app.config.settings import settings
 from app.handlers import router as main_router
-from app.ton.connect import router as ton_router
 from app.middlewares import BlockedUserMiddleware, DatabaseMiddleware, UserMiddleware
 from app.middlewares.session import SessionMiddleware
 from app.utils.logging import get_logger, setup_logging
@@ -16,19 +20,34 @@ from app.utils.redis_cache import redis_cache
 
 logger = get_logger(__name__)
 
+MANIFEST_URL = "https://raw.githubusercontent.com/NicktoZz/pyton/refs/heads/main/tonconnect-manifest.json"
+
 
 async def create_dispatcher() -> Dispatcher:
     await redis_cache.connect()
     storage = RedisStorage.from_url(settings.redis_url)
     dp = Dispatcher(storage=storage)
 
+    # TON Connect Middleware
+    tonconnect = TonConnect(
+        manifest_url=MANIFEST_URL,
+        storage=ATCRedisStorage(storage.redis),
+    )
+    dp.update.middleware.register(
+        AiogramTonConnectMiddleware(
+            tonconnect=tonconnect,
+            qrcode_provider=QRUrlProvider(),
+        )
+    )
+    AiogramTonConnectHandlers().register(dp)
+
+    # Existing middlewares
     dp.update.middleware(SessionMiddleware())
     dp.update.middleware(DatabaseMiddleware())
     dp.update.middleware(UserMiddleware())
     dp.update.middleware(BlockedUserMiddleware())
 
     dp.include_router(main_router)
-    dp.include_router(ton_router)
     return dp
 
 

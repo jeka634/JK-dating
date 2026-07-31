@@ -345,15 +345,39 @@ async def settings_rebrowse(callback: CallbackQuery, db_user: User) -> None:
 
 
 @router.callback_query(F.data == "settings:ton")
-async def settings_ton(callback: CallbackQuery, db_user: User) -> None:
-    # Если кошелёк уже подключён — показываем адрес и баланс
+async def settings_ton(callback: CallbackQuery, db_user: User, atc_manager) -> None:
+    from aiogram_tonconnect import ATCManager
+    
+    # Если уже подключён через TonConnect — показываем адрес
+    if atc_manager and atc_manager.connector.connected:
+        addr = atc_manager.user.wallet_address
+        if addr:
+            # Синхронизируем с БД
+            if not db_user.ton_wallet_address:
+                from app.database.repositories.user import UserRepository
+                from app.database.session import get_session
+                async with get_session() as session:
+                    repo = UserRepository(session)
+                    await repo.set_ton_wallet(db_user, addr)
+            
+            from app.ton.connect import fetch_jk_balance
+            jk_balance = await fetch_jk_balance(addr)
+            balance_text = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
+            await callback.message.answer(
+                f"💎 Кошелёк подключён\n`{addr[:20]}...{addr[-6:]}`{balance_text}",
+                reply_markup=ton_wallet_keyboard(db_user.language),
+            )
+            await callback.answer()
+            return
+
+    # Иначе — показываем меню
     if db_user.ton_wallet_address:
         from app.ton.connect import fetch_jk_balance
         addr = db_user.ton_wallet_address
         jk_balance = await fetch_jk_balance(addr)
         balance_text = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
         await callback.message.answer(
-            f"💎 Кошелёк подключён\n`{addr[:15]}...{addr[-6:]}`{balance_text}",
+            f"💎 Кошелёк (сохранён)\n`{addr[:20]}...{addr[-6:]}`{balance_text}",
             reply_markup=ton_wallet_keyboard(db_user.language),
         )
     else:
