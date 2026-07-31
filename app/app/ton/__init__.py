@@ -1,3 +1,3 @@
-from app.ton.connect import router
+from app.ton.connect import router, TonConnectService
 
-__all__ = ["router"]
+__all__ = ["router", "TonConnectService"]

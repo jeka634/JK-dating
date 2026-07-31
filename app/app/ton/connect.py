@@ -17,6 +17,16 @@ router.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
 
 logger = logging.getLogger(__name__)
 
+
+class TonConnectService:
+    """Совместимость со старым кодом."""
+    async def validate_address(self, address: str) -> bool:
+        return bool(address and len(address) >= 48)
+
+    async def get_wallet_info(self, address: str) -> dict:
+        return {"address": address, "balance": "0"}
+
+
 JK_TOKEN = "EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM"
 
 

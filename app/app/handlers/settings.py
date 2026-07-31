@@ -13,7 +13,7 @@ from app.keyboards import (
     ton_wallet_keyboard,
 )
 from app.services import UserService
-from app.states import EditProfileStates, FilterStates, TonConnectStates
+from app.states import EditProfileStates, FilterStates
 from app.ton.connect import TonConnectService
 from app.utils.redis_cache import redis_cache
 from app.utils.texts import format_profile, get_text
@@ -389,50 +389,25 @@ async def settings_ton(callback: CallbackQuery, db_user: User, atc_manager) -> N
 
 
 @router.callback_query(F.data == "ton:connect")
-async def ton_connect(callback: CallbackQuery, db_user: User, state: FSMContext) -> None:
-    await callback.message.answer(
-        "Send your TON wallet address (EQ... or UQ...):"
-        if db_user.language.value == "en"
-        else "Отправьте адрес TON кошелька (EQ... или UQ...):"
-    )
-    await state.set_state(TonConnectStates.waiting_wallet)
+async def ton_connect(callback: CallbackQuery, db_user: User) -> None:
+    """Перенаправляет на TON Connect."""
+    # Имитируем нажатие кнопки Tonkeeper
+    from app.ton.connect import ton_connect_handler
+    await callback.message.answer("🔗 Запускаю подключение...")
+    await ton_connect_handler(callback.message, None, None)
     await callback.answer()
-
-
-@router.message(TonConnectStates.waiting_wallet, F.text)
-async def ton_save_wallet(
-    message: Message, db_user: User, state: FSMContext, session: object
-) -> None:
-    address = message.text.strip()
-    ton_service = TonConnectService()
-    if not await ton_service.validate_address(address):
-        await message.answer(
-            "Invalid address. Try again:"
-            if db_user.language.value == "en"
-            else "Неверный адрес. Попробуйте снова:"
-        )
-        return
-
-    user_repo = UserRepository(session)
-    await user_repo.set_ton_wallet(db_user, address)
-    await state.clear()
-    await message.answer(
-        get_text("ton_wallet_connected", db_user.language, address=address[:20] + "..."),
-        reply_markup=main_menu_keyboard(db_user.language),
-    )
 
 
 @router.callback_query(F.data == "ton:balance")
 async def ton_balance(callback: CallbackQuery, db_user: User) -> None:
+    """Проверка баланса JK Coin."""
     if not db_user.ton_wallet_address:
         await callback.answer(
             get_text("ton_not_connected", db_user.language), show_alert=True
         )
         return
 
-    ton_service = TonConnectService()
-    info = await ton_service.get_wallet_info(db_user.ton_wallet_address)
-    await callback.message.answer(
-        get_text("ton_balance", db_user.language, balance=f"{info.balance_jk:.4f}")
-    )
-    await callback.answer()
+    from app.ton.connect import fetch_jk_balance
+    jk_balance = await fetch_jk_balance(db_user.ton_wallet_address)
+    balance_str = f"{jk_balance} JK" if jk_balance else "0 JK"
+    await callback.answer(f"💰 Баланс: {balance_str}", show_alert=True)
