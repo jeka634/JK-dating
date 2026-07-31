@@ -86,7 +86,10 @@ def main_menu_keyboard(language: Language) -> ReplyKeyboardMarkup:
         builder.row(
             KeyboardButton(text="⚙️ Настройки"),
         )
-        builder.row(KeyboardButton(text="💎 Tonkeeper (TON)"))
+        builder.row(
+            KeyboardButton(text="💎 Tonkeeper (TON)"),
+            KeyboardButton(text="💱 JK Калькулятор", web_app=WebAppInfo(url="https://jeka634.github.io/jk-converter/")),
+        )
     else:
         builder.row(
             KeyboardButton(text="❤️ Browse profiles"),

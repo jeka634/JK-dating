@@ -346,10 +346,21 @@ async def settings_rebrowse(callback: CallbackQuery, db_user: User) -> None:
 
 @router.callback_query(F.data == "settings:ton")
 async def settings_ton(callback: CallbackQuery, db_user: User) -> None:
-    await callback.message.answer(
-        get_text("settings_menu", db_user.language),
-        reply_markup=ton_wallet_keyboard(db_user.language),
-    )
+    # Если кошелёк уже подключён — показываем адрес и баланс
+    if db_user.ton_wallet_address:
+        from app.ton.connect import fetch_jk_balance
+        addr = db_user.ton_wallet_address
+        jk_balance = await fetch_jk_balance(addr)
+        balance_text = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
+        await callback.message.answer(
+            f"💎 Кошелёк подключён\n`{addr[:15]}...{addr[-6:]}`{balance_text}",
+            reply_markup=ton_wallet_keyboard(db_user.language),
+        )
+    else:
+        await callback.message.answer(
+            get_text("settings_menu", db_user.language),
+            reply_markup=ton_wallet_keyboard(db_user.language),
+        )
     await callback.answer()
 
 

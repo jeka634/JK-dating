@@ -1,4 +1,4 @@
-import asyncio, logging, os, random
+import asyncio, logging, os, random, json, urllib.request
 import qrcode
 from aiogram import types, Router, F
 from aiogram.fsm.context import FSMContext
@@ -10,6 +10,24 @@ router = Router(name="ton_wallet")
 MANIFEST_URL = "https://raw.githubusercontent.com/NicktoZz/pyton/refs/heads/main/tonconnect-manifest.json"
 
 logger = logging.getLogger(__name__)
+
+JK_TOKEN_CONTRACT = "EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM"
+
+
+async def fetch_jk_balance(wallet_address: str) -> str | None:
+    """Запрашивает баланс JK Coin через TON API."""
+    try:
+        url = f"https://tonapi.io/v2/accounts/{wallet_address}/jettons/{JK_TOKEN_CONTRACT}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+        balance = int(data.get("balance", 0)) / 1e9
+        if balance > 0:
+            return f"{balance:,.0f}"
+        return "0"
+    except Exception as e:
+        logger.debug(f"JK balance fetch: {e}")
+        return None
 
 
 class TonConnectService:
@@ -97,6 +115,25 @@ async def connect_wallet_handler(message: types.Message, state: FSMContext):
                     await session.commit()
 
             await message.answer(f"✅ Кошелёк подключён!\n`{address[:12]}...{address[-6:]}`")
+
+            # Показываем главное меню и баланс JK
+            from app.keyboards import main_menu_keyboard
+            from app.database.models import Language
+            lang = getattr(user, 'language', None) or Language.RU
+
+            # Запрашиваем баланс JK Coin
+            jk_balance = await fetch_jk_balance(address)
+            if jk_balance:
+                await message.answer(
+                    f"💰 Баланс JK: {jk_balance} JK\n"
+                    f"Адрес: `{address[:15]}...`",
+                    reply_markup=main_menu_keyboard(lang),
+                )
+            else:
+                await message.answer(
+                    "Проверьте баланс JK в кошельке 👆",
+                    reply_markup=main_menu_keyboard(lang),
+                )
             return
 
     await msg.delete()
