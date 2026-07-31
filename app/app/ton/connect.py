@@ -16,6 +16,11 @@ from sqlalchemy import select
 router = Router(name="ton_wallet")
 logger = logging.getLogger(__name__)
 
+class TonConnectService:
+    """Совместимость."""
+    pass
+
+
 JK_TOKEN = "EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM"
 
 
