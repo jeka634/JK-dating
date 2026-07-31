@@ -1,189 +1,98 @@
-from dataclasses import dataclass
-from typing import Optional
+"""TON Wallet Connect для JK Dating — авторизация через Tonkeeper."""
+import asyncio, logging, os, random
+import qrcode
+from aiogram import Router, F, types
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from pytonconnect import TonConnect
+from pytonconnect.storage import IStorage
 
-import httpx
+router = Router(name="ton_wallet")
+MANIFEST_URL = "https://raw.githubusercontent.com/NicktoZz/pyton/refs/heads/main/tonconnect-manifest.json"
 
-from app.config.settings import settings
-from app.utils.logging import get_logger
-
-logger = get_logger(__name__)
-
-
-@dataclass
-class TonWalletInfo:
-    address: str
-    balance_nano: int
-    balance_jk: float
-    is_connected: bool
+logger = logging.getLogger(__name__)
 
 
-class TonConnectService:
-    """TON Connect module for wallet integration and $JK token balance."""
+class MemoryStorage(IStorage):
+    """Хранилище TonConnect в памяти (per-user)."""
+    DB = {}
 
-    JK_DECIMALS = 9
+    def __init__(self, user_id: int):
+        self.prefix = str(user_id)
 
-    def __init__(self) -> None:
-        self.network = settings.ton_network
-        self.api_key = settings.ton_api_key
-        self.jk_contract = settings.jk_token_contract
-        if self.network == "mainnet":
-            self.base_url = "https://toncenter.com/api/v2"
-        else:
-            self.base_url = "https://testnet.toncenter.com/api/v2"
+    async def set_item(self, key: str, value: str):
+        MemoryStorage.DB[self.prefix + key] = value
 
-    def _headers(self) -> dict[str, str]:
-        headers = {"Accept": "application/json"}
-        if self.api_key:
-            headers["X-API-Key"] = self.api_key
-        return headers
+    async def get_item(self, key: str, default_value: str = None):
+        return MemoryStorage.DB.get(self.prefix + key, default_value)
 
-    async def validate_address(self, address: str) -> bool:
-        if not address or len(address) < 48:
-            return False
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/detectAddress",
-                    params={"address": address},
-                    headers=self._headers(),
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("ok", False)
-        except Exception as exc:
-            logger.error("ton_validate_address_error", error=str(exc))
-        return address.startswith("EQ") or address.startswith("UQ")
+    async def remove_item(self, key: str):
+        MemoryStorage.DB.pop(self.prefix + key, None)
 
-    async def get_wallet_balance(self, address: str) -> int:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/getAddressBalance",
-                    params={"address": address},
-                    headers=self._headers(),
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("ok"):
-                        return int(data.get("result", 0))
-        except Exception as exc:
-            logger.error("ton_balance_error", error=str(exc))
-        return 0
 
-    async def get_jk_token_balance(self, wallet_address: str) -> float:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/runGetMethod",
-                    json={
-                        "address": self.jk_contract,
-                        "method": "get_wallet_address",
-                        "stack": [
-                            ["tvm.Slice", wallet_address],
-                        ],
-                    },
-                    headers=self._headers(),
-                )
-                if response.status_code != 200:
-                    return await self._get_jetton_balance_fallback(wallet_address)
+async def send_connection_link(message: types.Message, connector: TonConnect) -> types.Message:
+    """Генерирует QR-код и кнопку для подключения Tonkeeper."""
+    wallets_list = connector.get_wallets()
+    # Tonkeeper — обычно первый в списке (индекс 0)
+    generated_url = await connector.connect(wallets_list[0])
 
-                data = response.json()
-                if not data.get("ok"):
-                    return await self._get_jetton_balance_fallback(wallet_address)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔗 Открыть Tonkeeper", url=generated_url)]
+    ])
 
-                stack = data.get("result", {}).get("stack", [])
-                if not stack:
-                    return 0.0
+    img = qrcode.make(generated_url)
+    path = f"/tmp/ton_qr_{random.randint(0, 99999)}.png"
+    img.save(path)
+    photo = FSInputFile(path)
+    msg = await message.answer_photo(photo=photo, caption="Подключи Tonkeeper:", reply_markup=kb)
+    os.remove(path)
+    return msg
 
-                jetton_wallet = stack[0][1].get("object", {}).get("data", {}).get(
-                    "bytes", ""
-                )
-                if not jetton_wallet:
-                    return await self._get_jetton_balance_fallback(wallet_address)
 
-                balance_response = await client.post(
-                    f"{self.base_url}/runGetMethod",
-                    json={
-                        "address": jetton_wallet,
-                        "method": "get_wallet_data",
-                        "stack": [],
-                    },
-                    headers=self._headers(),
-                )
-                if balance_response.status_code == 200:
-                    balance_data = balance_response.json()
-                    if balance_data.get("ok"):
-                        balance_stack = balance_data.get("result", {}).get("stack", [])
-                        if balance_stack:
-                            raw_balance = int(balance_stack[0][1], 16) if isinstance(
-                                balance_stack[0][1], str
-                            ) else int(balance_stack[0][1])
-                            return raw_balance / (10 ** self.JK_DECIMALS)
-        except Exception as exc:
-            logger.error("ton_jk_balance_error", error=str(exc))
+async def get_wallet_address(telegram_id: int) -> str | None:
+    """Подключает кошелёк и возвращает адрес или None."""
+    connector = TonConnect(manifest_url=MANIFEST_URL, storage=MemoryStorage(telegram_id))
+    # Если уже подключён — возвращаем адрес
+    if connector.connected and connector.account:
+        return connector.account.address
+    return None
 
-        return await self._get_jetton_balance_fallback(wallet_address)
 
-    async def _get_jetton_balance_fallback(self, wallet_address: str) -> float:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/getTransactions",
-                    params={
-                        "address": wallet_address,
-                        "limit": 1,
-                    },
-                    headers=self._headers(),
-                )
-                if response.status_code == 200:
-                    return 0.0
-        except Exception as exc:
-            logger.error("ton_jetton_fallback_error", error=str(exc))
-        return 0.0
+@router.message(F.text.in_(["Tonkeeper (TON)", "Tonkeeper"]))
+async def connect_wallet_handler(message: types.Message, state: FSMContext):
+    """Обработчик кнопки 'Tonkeeper'."""
 
-    async def get_wallet_info(
-        self, address: Optional[str]
-    ) -> TonWalletInfo:
-        if not address:
-            return TonWalletInfo(
-                address="",
-                balance_nano=0,
-                balance_jk=0.0,
-                is_connected=False,
-            )
+    connector = TonConnect(manifest_url=MANIFEST_URL, storage=MemoryStorage(message.from_user.id))
 
-        balance_nano = await self.get_wallet_balance(address)
-        balance_jk = await self.get_jk_token_balance(address)
+    try:
+        msg = await send_connection_link(message, connector)
+    except Exception as e:
+        logger.error(f"TonConnect init error: {e}")
+        await message.answer("⚠️ Не удалось создать подключение. Попробуй позже.")
+        return
 
-        return TonWalletInfo(
-            address=address,
-            balance_nano=balance_nano,
-            balance_jk=balance_jk,
-            is_connected=True,
-        )
+    # Ждём подключения (до 5 минут)
+    for _ in range(300):
+        await asyncio.sleep(1)
+        if connector.connected and connector.account:
+            address = connector.account.address
+            await msg.delete()
 
-    def generate_connect_url(self, bot_username: str, user_id: int) -> str:
-        return (
-            f"https://app.tonkeeper.com/ton-connect"
-            f"?v=2&app={bot_username}&id={user_id}"
-        )
+            # Сохраняем в БД
+            from app.database.session import get_session
+            from app.database.models import User
 
-    async def verify_payment(
-        self, tx_hash: str, expected_amount: float, recipient: str
-    ) -> bool:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(
-                    f"{self.base_url}/getTransactions",
-                    params={"address": recipient, "limit": 10},
-                    headers=self._headers(),
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("ok"):
-                        for tx in data.get("result", []):
-                            if tx.get("transaction_id", {}).get("hash") == tx_hash:
-                                return True
-        except Exception as exc:
-            logger.error("ton_verify_payment_error", error=str(exc))
-        return False
+            async with get_session() as session:
+                from sqlalchemy import select, update
+                stmt = select(User).where(User.telegram_id == message.from_user.id)
+                result = await session.execute(stmt)
+                user = result.scalar_one_or_none()
+                if user:
+                    user.ton_wallet_address = address
+                    await session.commit()
+
+            await message.answer(f"✅ Кошелёк подключён!\n`{address[:12]}...{address[-6:]}`")
+            return
+
+    await msg.delete()
+    await message.answer("⌛ Истекло время подключения. Попробуй ещё раз.")

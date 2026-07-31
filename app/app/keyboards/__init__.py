@@ -83,7 +83,10 @@ def main_menu_keyboard(language: Language) -> ReplyKeyboardMarkup:
             KeyboardButton(text="⭐ Premium"),
             KeyboardButton(text="👤 Моя анкета"),
         )
-        builder.row(KeyboardButton(text="⚙️ Настройки"))
+        builder.row(
+            KeyboardButton(text="⚙️ Настройки"),
+        )
+        builder.row(KeyboardButton(text="💎 Tonkeeper (TON)"))
     else:
         builder.row(
             KeyboardButton(text="❤️ Browse profiles"),

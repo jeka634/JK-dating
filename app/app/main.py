@@ -8,6 +8,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 
 from app.config.settings import settings
 from app.handlers import router as main_router
+from app.ton.connect import router as ton_router
 from app.middlewares import BlockedUserMiddleware, DatabaseMiddleware, UserMiddleware
 from app.middlewares.session import SessionMiddleware
 from app.utils.logging import get_logger, setup_logging
@@ -27,6 +28,7 @@ async def create_dispatcher() -> Dispatcher:
     dp.update.middleware(BlockedUserMiddleware())
 
     dp.include_router(main_router)
+    dp.include_router(ton_router)
     return dp
 
 
