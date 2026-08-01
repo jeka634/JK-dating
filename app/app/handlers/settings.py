@@ -91,9 +91,13 @@ async def profile_reset(
         if db_user.language == Language.RU
         else "🔄 Profile reset. Let's fill it again!\n\n📝 Enter your name:"
     )
-    await callback.message.edit_text(confirm_text)
+    # Профиль отображается как фото с caption — используем edit_caption
+    try:
+        await callback.message.edit_caption(caption=confirm_text)
+    except Exception:
+        await callback.message.edit_text(confirm_text)
     await state.set_state(RegistrationStates.name)
-    await callback.answer()
+    await callback.answer("🔄 Анкета сброшена!", show_alert=True)
 
 
 @router.callback_query(F.data == "menu:back")
