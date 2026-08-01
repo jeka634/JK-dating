@@ -203,8 +203,12 @@ def settings_keyboard(language: Language, is_premium: bool) -> InlineKeyboardMar
 def profile_actions_keyboard(language: Language) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     edit_text = "✏️ Редактировать" if language == Language.RU else "✏️ Edit"
+    reset_text = "🔄 Заполнить заново" if language == Language.RU else "🔄 Reset profile"
     builder.row(
         InlineKeyboardButton(text=edit_text, callback_data="profile:edit")
+    )
+    builder.row(
+        InlineKeyboardButton(text=reset_text, callback_data="profile:reset")
     )
     back_text = "◀️ Назад" if language == Language.RU else "◀️ Back"
     builder.row(InlineKeyboardButton(text=back_text, callback_data="menu:back"))

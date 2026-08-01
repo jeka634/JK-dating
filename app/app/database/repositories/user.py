@@ -55,6 +55,21 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def reset_profile(self, user_id: int) -> None:
+        """Полный сброс анкеты: очищает поля и удаляет фото."""
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return
+        user.name = None
+        user.age = None
+        user.gender = None
+        user.looking_for = None
+        user.city = None
+        user.description = None
+        user.is_registered = False
+        await self.delete_photos(user_id)
+        await self.session.flush()
+
     async def add_photo(
         self,
         user_id: int,

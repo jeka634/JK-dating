@@ -2,7 +2,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from app.database.models import User
+from app.database.models import Language, User
 from app.database.repositories.user import UserRepository
 from app.keyboards import (
     cancel_keyboard,
@@ -12,7 +12,7 @@ from app.keyboards import (
     settings_keyboard,
 )
 from app.services import UserService
-from app.states import EditProfileStates, FilterStates
+from app.states import EditProfileStates, FilterStates, RegistrationStates
 from app.utils.redis_cache import redis_cache
 from app.utils.texts import format_profile, get_text
 
@@ -63,6 +63,36 @@ async def profile_edit(callback: CallbackQuery, db_user: User) -> None:
     await callback.message.edit_reply_markup(
         reply_markup=settings_keyboard(db_user.language, db_user.is_premium)
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:reset")
+async def profile_reset(
+    callback: CallbackQuery, db_user: User, state: FSMContext, session: object
+) -> None:
+    """Полный сброс анкеты: очищает все поля и запускает регистрацию заново."""
+    from app.database.repositories.user import UserRepository
+
+    repo = UserRepository(session)
+    await repo.reset_profile(db_user.id)
+
+    # Очищаем FSM и начинаем регистрацию с языка
+    await state.clear()
+    db_user.is_registered = False
+    db_user.name = None
+    db_user.age = None
+    db_user.gender = None
+    db_user.looking_for = None
+    db_user.city = None
+    db_user.description = None
+
+    confirm_text = (
+        "🔄 Анкета сброшена. Давай заполним её заново!\n\n📝 Введите ваше имя:"
+        if db_user.language == Language.RU
+        else "🔄 Profile reset. Let's fill it again!\n\n📝 Enter your name:"
+    )
+    await callback.message.edit_text(confirm_text)
+    await state.set_state(RegistrationStates.name)
     await callback.answer()
 
 
