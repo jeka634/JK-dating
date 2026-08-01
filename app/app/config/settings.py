@@ -25,8 +25,7 @@ class Settings(BaseSettings):
     secret_key: str = Field(alias="SECRET_KEY")
     admin_ids: List[int] = Field(default_factory=list, alias="ADMIN_IDS")
     admin_api_key: str = Field(default="", alias="ADMIN_API_KEY")
-    ton_api_key: str = Field(default="", alias="TON_API_KEY")
-    ton_network: str = Field(default="mainnet", alias="TON_NETWORK")
+    jwt_secret: str = Field(default="", alias="JWT_SECRET")
     jk_token_contract: str = Field(
         default="EQAK3lkmVshzYJeypOCtPBnE_kOJ4Nb9hwyRvQJeRDDW6HPM",
         alias="JK_TOKEN_CONTRACT",

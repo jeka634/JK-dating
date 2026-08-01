@@ -48,9 +48,34 @@ def _resume_message(user: User, state: RegistrationStates) -> str:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, db_user: User, state: FSMContext) -> None:
+async def cmd_start(message: Message, db_user: User, state: FSMContext, session: object) -> None:
+    from datetime import datetime, timezone
+
     if db_user.is_blocked:
-        await message.answer(get_text("blocked", db_user.language))
+        # Авто-разблокировка после 3 дней
+        if db_user.blocked_until and db_user.blocked_until < datetime.now(timezone.utc):
+            db_user.is_blocked = False
+            db_user.blocked_reason = None
+            db_user.blocked_until = None
+            db_user.complaints_count = 0
+            session.add(db_user)
+            await session.commit()
+            await state.clear()
+            await message.answer(
+                get_text("unblocked", db_user.language),
+                reply_markup=main_menu_keyboard(db_user.language),
+            )
+            return
+
+        # Показываем причину блокировки
+        from datetime import datetime, timezone
+        if db_user.blocked_until:
+            unlock_date = db_user.blocked_until.strftime("%d.%m.%Y")
+        else:
+            unlock_date = "навсегда"
+        await message.answer(
+            get_text("blocked", db_user.language, reason=db_user.blocked_reason or "жалобы", unlock_date=unlock_date)
+        )
         return
 
     if db_user.is_registered:

@@ -5,7 +5,7 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
-from app.database.models import Language, User
+from app.database.models import Complaint, ComplaintStatus, Language, User
 from app.database.repositories.complaint import ComplaintRepository
 from app.database.repositories.like import LikeRepository
 from app.database.repositories.match import MatchRepository
@@ -220,6 +220,73 @@ class ComplaintService:
         self, reporter_id: int, reported_user_id: int, reason: str
     ) -> None:
         await self.complaint_repo.create(reporter_id, reported_user_id, reason)
+
+        # Авто-блокировка: 3 жалобы = блок
+        from app.database.models import User
+        from sqlalchemy import select, func, update
+        from datetime import datetime, timedelta, timezone
+
+        # Считаем жалобы
+        complaint_count = await self.session.scalar(
+            select(func.count()).select_from(Complaint).where(
+                Complaint.reported_user_id == reported_user_id,
+                Complaint.status == ComplaintStatus.PENDING,
+            )
+        )
+        complaint_count = complaint_count or 0
+
+        # Обновляем счётчик
+        await self.session.execute(
+            update(User)
+            .where(User.id == reported_user_id)
+            .values(complaints_count=complaint_count)
+        )
+
+        if complaint_count >= 3:
+            blocked_user = await self.session.scalar(
+                select(User).where(User.id == reported_user_id)
+            )
+            if blocked_user and not blocked_user.is_blocked:
+                # Без премиума — навсегда, с премиумом — 3 дня
+                is_premium = blocked_user.is_premium and (
+                    blocked_user.premium_until is None
+                    or blocked_user.premium_until > datetime.now(timezone.utc)
+                )
+
+                if is_premium:
+                    blocked_until = datetime.now(timezone.utc) + timedelta(days=3)
+                    unlock_text = "через 3 дня"
+                else:
+                    blocked_until = None  # навсегда
+                    unlock_text = "навсегда"
+
+                await self.session.execute(
+                    update(User)
+                    .where(User.id == reported_user_id)
+                    .values(
+                        is_blocked=True,
+                        blocked_reason=f"Получено {complaint_count} жалоб от пользователей",
+                        blocked_until=blocked_until,
+                    )
+                )
+
+                # Уведомление заблокированному
+                from aiogram import Bot
+                from app.config.settings import settings
+                bot = Bot(token=settings.bot_token)
+                try:
+                    await bot.send_message(
+                        blocked_user.telegram_id,
+                        f"🚫 <b>Ваша анкета заблокирована</b>\n\n"
+                        f"Причина: получено {complaint_count} жалоб от пользователей.\n"
+                        f"Разблокировка: {unlock_text}\n\n"
+                        f"<i>⭐ Разблокировка возможна только при наличии премиум-подписки.</i>",
+                    )
+                except Exception:
+                    pass
+                await bot.session.close()
+
+        await self.session.commit()
 
 
 class NotificationService:

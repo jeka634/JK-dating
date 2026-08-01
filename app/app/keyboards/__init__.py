@@ -86,9 +86,6 @@ def main_menu_keyboard(language: Language) -> ReplyKeyboardMarkup:
         builder.row(
             KeyboardButton(text="⚙️ Настройки"),
         )
-        builder.row(
-            KeyboardButton(text="💎 Tonkeeper (TON)"),
-        )
     else:
         builder.row(
             KeyboardButton(text="❤️ Browse profiles"),
@@ -101,7 +98,6 @@ def main_menu_keyboard(language: Language) -> ReplyKeyboardMarkup:
         builder.row(
             KeyboardButton(text="⚙️ Settings"),
         )
-        builder.row(KeyboardButton(text="💎 Tonkeeper (TON)"))
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -170,9 +166,6 @@ def settings_keyboard(language: Language, is_premium: bool) -> InlineKeyboardMar
             InlineKeyboardButton(text="🔗 Реферальная ссылка", callback_data="settings:referral")
         )
         builder.row(
-            InlineKeyboardButton(text="💎 TON кошелёк", callback_data="settings:ton")
-        )
-        builder.row(
             InlineKeyboardButton(text="🔄 Повторный просмотр", callback_data="settings:rebrowse")
         )
     else:
@@ -200,9 +193,6 @@ def settings_keyboard(language: Language, is_premium: bool) -> InlineKeyboardMar
             InlineKeyboardButton(text="🔗 Referral link", callback_data="settings:referral")
         )
         builder.row(
-            InlineKeyboardButton(text="💎 TON wallet", callback_data="settings:ton")
-        )
-        builder.row(
             InlineKeyboardButton(text="🔄 Re-browse", callback_data="settings:rebrowse")
         )
     back_text = "◀️ Назад" if language == Language.RU else "◀️ Back"
@@ -226,22 +216,3 @@ def cancel_keyboard(language: Language) -> ReplyKeyboardMarkup:
     text = "❌ Отмена" if language == Language.RU else "❌ Cancel"
     builder.row(KeyboardButton(text=text))
     return builder.as_markup(resize_keyboard=True)
-
-
-def ton_wallet_keyboard(language: Language) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    connect_text = (
-        "🔗 Подключить кошелёк" if language == Language.RU else "🔗 Connect wallet"
-    )
-    balance_text = (
-        "💎 Проверить баланс $JK" if language == Language.RU else "💎 Check $JK balance"
-    )
-    builder.row(
-        InlineKeyboardButton(text=connect_text, callback_data="ton:connect")
-    )
-    builder.row(
-        InlineKeyboardButton(text=balance_text, callback_data="ton:balance")
-    )
-    back_text = "◀️ Назад" if language == Language.RU else "◀️ Back"
-    builder.row(InlineKeyboardButton(text=back_text, callback_data="menu:back"))
-    return builder.as_markup()

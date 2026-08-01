@@ -79,6 +79,11 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    blocked_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    blocked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    complaints_count: Mapped[int] = mapped_column(Integer, default=0)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     profile_boosted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -87,7 +92,6 @@ class User(Base):
     referred_by_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True
     )
-    ton_wallet_address: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     filter_age_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     filter_age_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     filter_city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

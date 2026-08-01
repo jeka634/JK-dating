@@ -10,11 +10,9 @@ from app.keyboards import (
     photos_done_keyboard,
     profile_actions_keyboard,
     settings_keyboard,
-    ton_wallet_keyboard,
 )
 from app.services import UserService
 from app.states import EditProfileStates, FilterStates
-from app.ton.connect import TonConnectService
 from app.utils.redis_cache import redis_cache
 from app.utils.texts import format_profile, get_text
 
@@ -342,91 +340,3 @@ async def settings_rebrowse(callback: CallbackQuery, db_user: User) -> None:
         return
     await redis_cache.clear_browse_exclude(db_user.id)
     await callback.answer("✅", show_alert=True)
-
-
-@router.callback_query(F.data == "settings:ton")
-async def settings_ton(callback: CallbackQuery, db_user: User, atc_manager) -> None:
-    from aiogram_tonconnect import ATCManager
-    
-    # Если уже подключён через TonConnect — показываем адрес
-    if atc_manager and atc_manager.connector.connected:
-        addr = atc_manager.user.wallet_address
-        if addr:
-            # Синхронизируем с БД
-            if not db_user.ton_wallet_address:
-                from app.database.repositories.user import UserRepository
-                from app.database.session import get_session
-                async with get_session() as session:
-                    repo = UserRepository(session)
-                    await repo.set_ton_wallet(db_user, addr)
-            
-            from app.ton.connect import fetch_jk_balance
-            jk_balance = await fetch_jk_balance(addr)
-            balance_text = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
-            await callback.message.answer(
-                f"💎 Кошелёк подключён\n`{addr[:20]}...{addr[-6:]}`{balance_text}",
-                reply_markup=ton_wallet_keyboard(db_user.language),
-            )
-            await callback.answer()
-            return
-
-    # Иначе — показываем меню
-    if db_user.ton_wallet_address:
-        from app.ton.connect import fetch_jk_balance
-        addr = db_user.ton_wallet_address
-        jk_balance = await fetch_jk_balance(addr)
-        balance_text = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
-        await callback.message.answer(
-            f"💎 Кошелёк (сохранён)\n`{addr[:20]}...{addr[-6:]}`{balance_text}",
-            reply_markup=ton_wallet_keyboard(db_user.language),
-        )
-    else:
-        await callback.message.answer(
-            get_text("settings_menu", db_user.language),
-            reply_markup=ton_wallet_keyboard(db_user.language),
-        )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "ton:connect")
-async def ton_connect(callback: CallbackQuery, db_user: User, atc_manager) -> None:
-    """Перенаправляет на TON Connect через нажатие кнопки."""
-    from aiogram_tonconnect import ATCManager
-    from app.ton.connect import ConnectWalletCallbacks, save_wallet_to_db, fetch_jk_balance
-    from app.keyboards import main_menu_keyboard
-
-    if not atc_manager:
-        await callback.message.answer("⚠️ Ошибка. Нажми 💎 Tonkeeper (TON) в главном меню.")
-        await callback.answer()
-        return
-
-    async def after_connect():
-        address = atc_manager.user.wallet_address
-        if not address:
-            return
-        lang = await save_wallet_to_db(callback.from_user.id, address)
-        jk_balance = await fetch_jk_balance(address)
-        balance_line = f"\n💰 JK баланс: {jk_balance} JK" if jk_balance else ""
-        await callback.message.answer(
-            f"✅ Кошелёк подключён!\n`{address[:20]}...`{balance_line}",
-            reply_markup=main_menu_keyboard(lang),
-        )
-
-    callbacks = ConnectWalletCallbacks(after_callback=after_connect)
-    await atc_manager.connect_wallet(callbacks)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "ton:balance")
-async def ton_balance(callback: CallbackQuery, db_user: User) -> None:
-    """Проверка баланса JK Coin."""
-    if not db_user.ton_wallet_address:
-        await callback.answer(
-            get_text("ton_not_connected", db_user.language), show_alert=True
-        )
-        return
-
-    from app.ton.connect import fetch_jk_balance
-    jk_balance = await fetch_jk_balance(db_user.ton_wallet_address)
-    balance_str = f"{jk_balance} JK" if jk_balance else "0 JK"
-    await callback.answer(f"💰 Баланс: {balance_str}", show_alert=True)

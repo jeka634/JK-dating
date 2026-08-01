@@ -185,8 +185,3 @@ class UserRepository:
         user.language = language
         await self.session.flush()
         return user
-
-    async def set_ton_wallet(self, user: User, address: str) -> User:
-        user.ton_wallet_address = address
-        await self.session.flush()
-        return user

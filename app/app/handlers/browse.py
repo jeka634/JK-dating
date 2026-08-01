@@ -146,6 +146,31 @@ async def process_complaint(
 
     complaint_service = ComplaintService(session)
     await complaint_service.file_complaint(db_user.id, profile_id, message.text.strip())
+
+    # Авто-блокировка при 3+ жалобах
+    from app.database.models import Complaint, ComplaintStatus
+    from app.database.repositories.user import UserRepository
+    from sqlalchemy import func, select
+
+    pending_count = await session.scalar(
+        select(func.count(Complaint.id)).where(
+            Complaint.reported_user_id == profile_id,
+            Complaint.status == ComplaintStatus.PENDING,
+        )
+    )
+    if pending_count and pending_count >= 3:
+        user_repo = UserRepository(session)
+        reported_user = await user_repo.get_by_id(profile_id)
+        if reported_user and not reported_user.is_blocked:
+            await user_repo.set_blocked(profile_id, True)
+            try:
+                await message.bot.send_message(
+                    reported_user.telegram_id,
+                    f"🚫 Ваша анкета заблокирована — получено {pending_count} жалоб от пользователей.",
+                )
+            except Exception:
+                pass
+
     await state.clear()
     await message.answer(
         get_text("complaint_sent", db_user.language),
