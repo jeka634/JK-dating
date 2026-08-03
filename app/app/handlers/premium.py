@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
+from loguru import logger
 
 from app.config.settings import settings
 from app.database.models import User
@@ -47,42 +48,115 @@ async def premium_buy(callback: CallbackQuery, db_user: User, session: object) -
         f"Premium subscription for {settings.premium_duration_days} days"
     )
 
-    await callback.bot.send_invoice(
-        chat_id=callback.message.chat.id,
-        title=title,
-        description=description,
-        payload=payload,
-        provider_token="",
-        currency="XTR",
-        prices=[
-            LabeledPrice(
-                label="Premium",
-                amount=settings.premium_price_stars,
-            )
-        ],
-    )
-    await callback.answer()
+    try:
+        await callback.bot.send_invoice(
+            chat_id=callback.message.chat.id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="",
+            currency="XTR",
+            prices=[
+                LabeledPrice(
+                    label="Premium",
+                    amount=settings.premium_price_stars,
+                )
+            ],
+        )
+        logger.info(
+            "invoice_sent",
+            user_id=db_user.id,
+            payment_id=payment_id,
+            payload=payload,
+        )
+    except Exception as e:
+        logger.error(
+            "invoice_failed",
+            user_id=db_user.id,
+            payment_id=payment_id,
+            error=str(e),
+        )
+        await callback.answer(
+            "Ошибка при создании счёта. Попробуй позже.",
+            show_alert=True,
+        )
+    else:
+        await callback.answer()
 
 
 @router.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout: PreCheckoutQuery) -> None:
-    await pre_checkout.answer(ok=True)
+    logger.info(
+        "pre_checkout_received",
+        user_id=pre_checkout.from_user.id,
+        payload=pre_checkout.invoice_payload,
+        total_amount=pre_checkout.total_amount,
+        currency=pre_checkout.currency,
+    )
+    try:
+        await pre_checkout.answer(ok=True)
+        logger.info(
+            "pre_checkout_ok",
+            user_id=pre_checkout.from_user.id,
+            payload=pre_checkout.invoice_payload,
+        )
+    except Exception as e:
+        logger.error(
+            "pre_checkout_answer_failed",
+            user_id=pre_checkout.from_user.id,
+            error=str(e),
+        )
+        # Try to answer with error so user gets feedback
+        try:
+            await pre_checkout.answer(ok=False, error_message="Payment error. Try again.")
+        except Exception:
+            pass
 
 
 @router.message(F.successful_payment)
 async def successful_payment(message: Message, db_user: User, session: object) -> None:
     payment = message.successful_payment
-    stars_service = StarsPaymentService(session)
-    user = await stars_service.process_successful_payment(
-        payload=payment.invoice_payload,
+    logger.info(
+        "successful_payment_received",
+        user_id=message.from_user.id,
         telegram_charge_id=payment.telegram_payment_charge_id,
-        provider_charge_id=payment.provider_payment_charge_id,
+        payload=payment.invoice_payload,
         total_amount=payment.total_amount,
     )
+    stars_service = StarsPaymentService(session)
+    try:
+        user = await stars_service.process_successful_payment(
+            payload=payment.invoice_payload,
+            telegram_charge_id=payment.telegram_payment_charge_id,
+            provider_charge_id=payment.provider_payment_charge_id,
+            total_amount=payment.total_amount,
+        )
+    except Exception as e:
+        logger.error(
+            "process_payment_failed",
+            user_id=message.from_user.id,
+            payload=payment.invoice_payload,
+            error=str(e),
+        )
+        await message.answer(
+            "Ошибка при активации Premium. Напиши @JekardosAI.",
+        )
+        return
+
     if user:
+        logger.info(
+            "premium_activated",
+            user_id=user.id,
+            premium_until=str(user.premium_until),
+        )
         await message.answer(
             get_text("premium_purchased", user.language),
             reply_markup=main_menu_keyboard(user.language),
+        )
+    else:
+        logger.warning(
+            "payment_user_not_found",
+            payload=payment.invoice_payload,
         )
 
 

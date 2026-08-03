@@ -61,7 +61,14 @@ async def run_polling() -> None:
     dp.shutdown.register(on_shutdown)
 
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "pre_checkout_query",
+            ],
+        )
     finally:
         await bot.session.close()
 
