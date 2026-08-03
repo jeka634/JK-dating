@@ -79,6 +79,7 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     blocked_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

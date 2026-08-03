@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from app.database.models import Language, User
+from app.database.models import Gender, Language, User
 from app.keyboards import (
     gender_keyboard,
     language_keyboard,
@@ -80,6 +80,15 @@ async def cmd_start(message: Message, db_user: User, state: FSMContext, session:
 
     if db_user.is_registered:
         await state.clear()
+
+        # Female users must verify before appearing in search
+        if db_user.gender == Gender.FEMALE and not db_user.is_verified:
+            await message.answer(
+                get_text("female_verify_required", db_user.language),
+                reply_markup=main_menu_keyboard(db_user.language),
+            )
+            return
+
         await message.answer(
             get_text("main_menu", db_user.language),
             reply_markup=main_menu_keyboard(db_user.language),

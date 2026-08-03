@@ -123,6 +123,14 @@ class UserRepository:
         if not viewer.is_premium:
             conditions.append(User.is_hidden.is_(False))
 
+        # Female profiles must be verified to appear in browse
+        conditions.append(
+            or_(
+                User.gender != Gender.FEMALE,
+                User.is_verified.is_(True),
+            )
+        )
+
         gender_match = or_(
             User.looking_for == LookingFor.ALL,
             and_(
