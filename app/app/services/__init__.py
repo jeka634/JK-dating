@@ -46,7 +46,32 @@ class UserService:
         )
 
         if referred_by_id:
-            await self.referral_repo.create(referred_by_id, user.id)
+            referral = await self.referral_repo.create(referred_by_id, user.id)
+
+            # Give free Premium to BOTH: referrer + referred
+            from datetime import datetime, timedelta, timezone
+
+            now = datetime.now(timezone.utc)
+            bonus_days = settings.referral_bonus_days
+            expires = now + timedelta(days=bonus_days)
+
+            # Referrer gets bonus days
+            referrer = await self.user_repo.get_by_id(referred_by_id)
+            if referrer:
+                if referrer.is_premium and referrer.premium_until:
+                    referrer.premium_until = referrer.premium_until + timedelta(days=bonus_days)
+                else:
+                    referrer.is_premium = True
+                    referrer.premium_until = expires
+                await self.user_repo.update(referrer)
+
+            # Referred user gets free Premium too
+            user.is_premium = True
+            user.premium_until = expires
+            await self.user_repo.update(user)
+
+            # Mark bonus as granted so activate_premium doesn't double it
+            await self.referral_repo.grant_bonus(referral)
 
         return user
 
