@@ -86,6 +86,16 @@ async def cmd_start(message: Message, db_user: User, state: FSMContext, session:
         )
         return
 
+    # Check username visibility — required for dating
+    if not message.from_user.username:
+        await message.answer(
+            "⚠️ Для знакомств нужен видимый @username.\n\n"
+            "Открой Настройки Telegram → Конфиденциальность → Имя пользователя → создай @username.\n\n"
+            "Без него тебе не смогут написать при взаимной симпатии. "
+            "После создания @username нажми /start снова."
+        )
+        return
+
     if db_user.rules_accepted:
         reg_state = _resume_registration_state(db_user)
         text = _resume_message(db_user, reg_state)

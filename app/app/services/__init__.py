@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
@@ -311,15 +312,24 @@ class NotificationService:
         self, user: User, matched_user: User
     ) -> None:
         for recipient, partner in [(user, matched_user), (matched_user, user)]:
+            # Build clickable link: @username if available, otherwise tg://user?id=
+            if partner.username:
+                username_link = f'<a href="https://t.me/{partner.username}">@{partner.username}</a>'
+            else:
+                username_link = f'<a href="tg://user?id={partner.telegram_id}">написать</a>'
+
             text = get_text(
                 "mutual_like_notify",
                 recipient.language,
                 name=partner.name or "",
                 age=partner.age or "",
                 city=partner.city or "",
+                username_link=username_link,
             )
             try:
-                await self.bot.send_message(recipient.telegram_id, text)
+                await self.bot.send_message(
+                    recipient.telegram_id, text, parse_mode=ParseMode.HTML
+                )
             except Exception:
                 pass
 

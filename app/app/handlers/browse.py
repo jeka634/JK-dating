@@ -77,7 +77,14 @@ async def browse_like(
         notification = NotificationService(callback.bot)
         await notification.notify_match(db_user, matched_user)
         await callback.answer(
-            get_text("mutual_like", db_user.language, name=matched_user.name),
+            get_text(
+                "mutual_like",
+                db_user.language,
+                name=matched_user.name,
+                age=matched_user.age or "?",
+                city=matched_user.city or "?",
+                username=matched_user.username or f"id{matched_user.telegram_id}",
+            ),
             show_alert=True,
         )
     else:
