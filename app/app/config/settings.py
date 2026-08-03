@@ -31,6 +31,8 @@ class Settings(BaseSettings):
         alias="JK_TOKEN_CONTRACT",
     )
     free_daily_likes: int = Field(default=20, alias="FREE_DAILY_LIKES")
+    new_user_likes: int = Field(default=5, alias="NEW_USER_LIKES")
+    new_user_limit_hours: int = Field(default=24, alias="NEW_USER_LIMIT_HOURS")
     premium_price_stars: int = Field(default=250, alias="PREMIUM_PRICE_STARS")
     premium_duration_days: int = Field(default=30, alias="PREMIUM_DURATION_DAYS")
     referral_bonus_days: int = Field(default=7, alias="REFERRAL_BONUS_DAYS")

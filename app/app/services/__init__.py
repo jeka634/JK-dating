@@ -106,11 +106,24 @@ class LikeService:
         self.match_repo = MatchRepository(session)
         self.user_repo = UserRepository(session)
 
-    async def can_like(self, user: User) -> bool:
+    async def can_like(self, user: User) -> Tuple[bool, Optional[str]]:
+        """Returns (can_like, reason_text_key). reason_text_key is None if can like."""
         if user.is_premium:
-            return True
+            return True, None
         today_count = await self.like_repo.count_today_likes(user.id)
-        return today_count < settings.free_daily_likes
+
+        # New user limit (< N hours since registration)
+        from datetime import datetime, timedelta, timezone
+        if user.created_at:
+            age = datetime.now(timezone.utc) - user.created_at
+            if age < timedelta(hours=settings.new_user_limit_hours):
+                if today_count >= settings.new_user_likes:
+                    return False, "new_user_like_limit"
+                return True, None
+
+        if today_count >= settings.free_daily_likes:
+            return False, "like_limit"
+        return True, None
 
     async def send_like(
         self, from_user: User, to_user_id: int
@@ -119,7 +132,8 @@ class LikeService:
         if existing:
             return False, None
 
-        if not await self.can_like(from_user):
+        can, _reason = await self.can_like(from_user)
+        if not can:
             return False, None
 
         like = await self.like_repo.create(from_user.id, to_user_id)

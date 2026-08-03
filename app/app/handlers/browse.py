@@ -55,13 +55,14 @@ async def browse_like(
         return
 
     like_service = LikeService(session)
-    can_like = await like_service.can_like(db_user)
-    if not can_like:
+    can, reason_key = await like_service.can_like(db_user)
+    if not can:
         await callback.answer(
             get_text(
-                "like_limit",
+                reason_key or "like_limit",
                 db_user.language,
-                limit=settings.free_daily_likes,
+                limit=settings.new_user_likes if reason_key == "new_user_like_limit" else settings.free_daily_likes,
+                hours=settings.new_user_limit_hours,
             ),
             show_alert=True,
         )
