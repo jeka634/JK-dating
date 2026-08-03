@@ -1,6 +1,8 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
-from loguru import logger
+from app.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 from app.config.settings import settings
 from app.database.models import User
